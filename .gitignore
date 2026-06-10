@@ -1,0 +1,30 @@
+# dependencies
+node_modules/
+
+# build outputs
+.next/
+dist/
+build/
+coverage/
+
+# Expo / React Native
+.expo/
+.expo-shared/
+android/
+ios/
+
+# environment
+.env
+.env.*
+!.env.example
+
+# logs
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

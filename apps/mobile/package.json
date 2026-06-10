@@ -1,0 +1,28 @@
+{
+  "name": "@znservis/mobile",
+  "version": "0.1.0",
+  "private": true,
+  "main": "index.js",
+  "scripts": {
+    "start": "expo start",
+    "android": "expo start --android",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@react-native-async-storage/async-storage": "2.2.0",
+    "@react-native-community/netinfo": "11.4.1",
+    "@react-native-picker/picker": "2.11.1",
+    "@supabase/supabase-js": "^2.107.0",
+    "@znservis/i18n": "file:../../packages/i18n",
+    "@znservis/shared": "file:../../packages/shared",
+    "babel-plugin-module-resolver": "^5.0.2",
+    "expo": "54.0.35",
+    "expo-sqlite": "16.0.10",
+    "react": "19.1.0",
+    "react-native": "0.81.5"
+  },
+  "devDependencies": {
+    "@types/react": "~19.1.10",
+    "typescript": "^5.9.3"
+  }
+}
