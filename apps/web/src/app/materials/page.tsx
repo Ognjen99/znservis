@@ -8,6 +8,7 @@ import { AdminShell } from "@/components/AdminShell";
 import { MaterialsCatalog } from "@/components/MaterialsCatalog";
 import { requireAdmin } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { firstRelation, type SupabaseRelation } from "@/lib/supabaseRelations";
 
 type MaterialRow = {
   id: string;
@@ -16,6 +17,15 @@ type MaterialRow = {
   active: boolean;
   group_id: string | null;
   material_groups: { name: string } | null;
+};
+
+type MaterialRecord = {
+  id: string;
+  name: string;
+  unit: string;
+  active: boolean;
+  group_id: string | null;
+  material_groups: SupabaseRelation<{ name: string }>;
 };
 
 export default async function MaterialsPage() {
@@ -30,7 +40,14 @@ export default async function MaterialsPage() {
       .order("name")
   ]);
 
-  const materialRows = (materials ?? []) as MaterialRow[];
+  const materialRows: MaterialRow[] = ((materials ?? []) as MaterialRecord[]).map((material) => ({
+    id: material.id,
+    name: material.name,
+    unit: material.unit,
+    active: material.active,
+    group_id: material.group_id,
+    material_groups: firstRelation(material.material_groups)
+  }));
 
   return (
     <AdminShell>

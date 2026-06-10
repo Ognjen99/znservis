@@ -3,6 +3,7 @@ import { AdminShell } from "@/components/AdminShell";
 import { TableWrap } from "@/components/TableWrap";
 import { requireAdmin } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { firstRelation, type SupabaseRelation } from "@/lib/supabaseRelations";
 
 type RecentReport = {
   id: string;
@@ -10,6 +11,14 @@ type RecentReport = {
   notes: string | null;
   profiles: { full_name: string } | null;
   locations: { name: string } | null;
+};
+
+type RecentReportRecord = {
+  id: string;
+  performed_at: string;
+  notes: string | null;
+  profiles: SupabaseRelation<{ full_name: string }>;
+  locations: SupabaseRelation<{ name: string }>;
 };
 
 export default async function DashboardPage() {
@@ -34,7 +43,13 @@ export default async function DashboardPage() {
         .limit(8)
     ]);
 
-  const reports = (recentReports.data ?? []) as RecentReport[];
+  const reports: RecentReport[] = ((recentReports.data ?? []) as RecentReportRecord[]).map((report) => ({
+    id: report.id,
+    performed_at: report.performed_at,
+    notes: report.notes,
+    profiles: firstRelation(report.profiles),
+    locations: firstRelation(report.locations)
+  }));
 
   return (
     <AdminShell>

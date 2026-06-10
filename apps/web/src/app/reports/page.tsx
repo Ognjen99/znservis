@@ -3,6 +3,7 @@ import { AdminShell } from "@/components/AdminShell";
 import { ReportsCatalog } from "@/components/ReportsCatalog";
 import { requireAdmin } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { firstRelation, type SupabaseRelation } from "@/lib/supabaseRelations";
 
 type ReportRow = {
   id: string;
@@ -16,6 +17,21 @@ type ReportRow = {
     material_id: string;
     quantity: number;
     materials: { name: string; unit: string } | null;
+  }>;
+};
+
+type ReportRecord = {
+  id: string;
+  performed_at: string;
+  notes: string | null;
+  worker_id: string | null;
+  location_id: string | null;
+  profiles: SupabaseRelation<{ full_name: string }>;
+  locations: SupabaseRelation<{ name: string; address: string | null }>;
+  work_report_items: Array<{
+    material_id: string;
+    quantity: number;
+    materials: SupabaseRelation<{ name: string; unit: string }>;
   }>;
 };
 
@@ -36,6 +52,21 @@ export default async function ReportsPage() {
       .limit(500)
   ]);
 
+  const reportRows: ReportRow[] = ((reports ?? []) as ReportRecord[]).map((report) => ({
+    id: report.id,
+    performed_at: report.performed_at,
+    notes: report.notes,
+    worker_id: report.worker_id,
+    location_id: report.location_id,
+    profiles: firstRelation(report.profiles),
+    locations: firstRelation(report.locations),
+    work_report_items: report.work_report_items.map((item) => ({
+      material_id: item.material_id,
+      quantity: item.quantity,
+      materials: firstRelation(item.materials)
+    }))
+  }));
+
   return (
     <AdminShell>
       <div className="page-header">
@@ -48,7 +79,7 @@ export default async function ReportsPage() {
       <ReportsCatalog
         locations={locations ?? []}
         materials={materials ?? []}
-        reports={(reports ?? []) as ReportRow[]}
+        reports={reportRows}
         workers={workers ?? []}
       />
     </AdminShell>
