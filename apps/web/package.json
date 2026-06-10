@@ -5,6 +5,8 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "prebuild": "node scripts/verify-vercel-build.mjs",
+    "vercel-build": "node scripts/verify-vercel-build.mjs && next build",
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc -p tsconfig.json --noEmit"
@@ -14,9 +16,9 @@
     "@supabase/supabase-js": "^2.107.0",
     "@znservis/i18n": "file:../../packages/i18n",
     "@znservis/shared": "file:../../packages/shared",
-    "next": "latest",
-    "react": "latest",
-    "react-dom": "latest"
+    "next": "16.2.7",
+    "react": "19.1.0",
+    "react-dom": "19.1.0"
   },
   "devDependencies": {
     "@types/node": "latest",
