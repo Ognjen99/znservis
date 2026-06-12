@@ -796,23 +796,10 @@ export async function deleteWorkOrderAction(formData: FormData) {
 
   const id = String(formData.get("id") ?? "");
   if (!id) {
-    throw new Error("Nedostaje ID radnog naloga.");
+    redirect(`/work-orders?error=${encodeURIComponent("Nedostaje ID radnog naloga.")}`);
   }
 
   const admin = createSupabaseAdminClient();
-  const { count, error: countError } = await admin
-    .from("work_reports")
-    .select("id", { count: "exact", head: true })
-    .eq("work_order_id", id);
-
-  if (countError) {
-    throw new Error(countError.message);
-  }
-
-  if ((count ?? 0) > 0) {
-    throw new Error("Radni nalog ima dnevne zapise i ne moze biti obrisan.");
-  }
-
   const { data: attachments } = await admin
     .from("work_order_attachments")
     .select("file_path")
@@ -821,7 +808,7 @@ export async function deleteWorkOrderAction(formData: FormData) {
   const { error } = await admin.from("work_orders").delete().eq("id", id);
 
   if (error) {
-    throw new Error(error.message);
+    redirect(`/work-orders?error=${encodeURIComponent(error.message)}`);
   }
 
   const paths = (attachments ?? []).map((attachment) => attachment.file_path);
@@ -831,4 +818,6 @@ export async function deleteWorkOrderAction(formData: FormData) {
 
   revalidatePath("/work-orders");
   revalidatePath("/");
+  revalidatePath("/reports");
+  redirect("/work-orders");
 }

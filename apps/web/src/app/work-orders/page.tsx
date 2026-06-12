@@ -7,6 +7,10 @@ import { requireAdmin } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { firstRelation, type SupabaseRelation } from "@/lib/supabaseRelations";
 
+type PageProps = {
+  searchParams: Promise<{ error?: string }>;
+};
+
 type WorkOrderRecord = {
   id: string;
   title: string;
@@ -55,8 +59,9 @@ function materialUsageFor(order: WorkOrderRecord) {
   });
 }
 
-export default async function WorkOrdersPage() {
+export default async function WorkOrdersPage({ searchParams }: PageProps) {
   await requireAdmin();
+  const { error } = await searchParams;
   const supabase = await createSupabaseServerClient();
 
   const [{ data: locations }, { data: workers }, { data: groups }, { data: materials }, { data: workOrders }] =
@@ -117,6 +122,12 @@ export default async function WorkOrdersPage() {
           <p className="muted">Planiranje visednevnih poslova, radnika, materijala i dnevnih zapisa.</p>
         </div>
       </div>
+
+      {error ? (
+        <section className="card" style={{ marginBottom: 16, borderColor: "var(--danger)" }}>
+          <p style={{ color: "var(--danger)", margin: 0 }}>{error}</p>
+        </section>
+      ) : null}
 
       <section className="card">
         <h3>{sr.workOrder.new}</h3>
