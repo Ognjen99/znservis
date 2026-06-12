@@ -11,6 +11,7 @@ import {
   uploadWorkOrderPlanAction
 } from "@/app/actions";
 import { AdminShell } from "@/components/AdminShell";
+import { WorkOrderMaterialsPicker } from "@/components/WorkOrderMaterialsPicker";
 import { TableWrap } from "@/components/TableWrap";
 import { requireAdmin } from "@/lib/auth";
 import {
@@ -91,7 +92,8 @@ export default async function WorkOrderDetailPage({ params }: PageProps) {
   const { id } = await params;
   const supabase = await createSupabaseServerClient();
 
-  const [{ data: order }, { data: locations }, { data: workers }, { data: materials }] = await Promise.all([
+  const [{ data: order }, { data: locations }, { data: workers }, { data: groups }, { data: materials }] =
+    await Promise.all([
     supabase
       .from("work_orders")
       .select(
@@ -101,7 +103,12 @@ export default async function WorkOrderDetailPage({ params }: PageProps) {
       .maybeSingle(),
     supabase.from("locations").select("id, name").eq("active", true).order("name"),
     supabase.from("profiles").select("id, full_name").eq("role", "worker").eq("active", true).order("full_name"),
-    supabase.from("materials").select("id, name, unit").eq("active", true).order("name")
+    supabase.from("material_groups").select("id, name").order("name"),
+    supabase
+      .from("materials")
+      .select("id, name, unit, group_id, material_groups(name)")
+      .eq("active", true)
+      .order("name")
   ]);
 
   if (!order) {
@@ -111,10 +118,32 @@ export default async function WorkOrderDetailPage({ params }: PageProps) {
   const workOrder = order as WorkOrderRecord;
   const location = firstRelation(workOrder.locations);
   const assignedWorkerIds = new Set(workOrder.work_order_assignees.map((assignee) => assignee.worker_id));
-  const assignedMaterialById = new Map(
-    workOrder.work_order_materials.map((assignment) => [assignment.material_id, assignment])
-  );
   const usageRows = usageFor(workOrder);
+  const materialOptions = ((materials ?? []) as Array<{
+    id: string;
+    name: string;
+    unit: string;
+    group_id: string | null;
+    material_groups: SupabaseRelation<{ name: string }>;
+  }>).map((material) => ({
+    id: material.id,
+    name: material.name,
+    unit: material.unit,
+    group_id: material.group_id,
+    group_name: firstRelation(material.material_groups)?.name ?? null
+  }));
+  const initialAssigned = workOrder.work_order_materials.map((assignment) => {
+    const material = firstRelation(assignment.materials);
+    const catalogMaterial = materialOptions.find((item) => item.id === assignment.material_id);
+
+    return {
+      material_id: assignment.material_id,
+      name: material?.name ?? "Materijal",
+      unit: material?.unit ?? "",
+      group_name: catalogMaterial?.group_name ?? null,
+      assigned_quantity: Number(assignment.assigned_quantity)
+    };
+  });
   const admin = createSupabaseAdminClient();
   const attachmentLinks = await Promise.all(
     workOrder.work_order_attachments.map(async (attachment) => {
@@ -255,37 +284,11 @@ export default async function WorkOrderDetailPage({ params }: PageProps) {
         <h3>{sr.workOrder.assignedMaterials}</h3>
         <form action={setWorkOrderMaterialsAction} className="form">
           <input name="work_order_id" type="hidden" value={workOrder.id} />
-          <TableWrap>
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>Materijal</th>
-                  <th>Jedinica</th>
-                  <th>Dodeljena kolicina</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(materials ?? []).map((material) => (
-                  <tr key={material.id}>
-                    <td>
-                      {material.name}
-                      <input name="material_id" type="hidden" value={material.id} />
-                    </td>
-                    <td>{material.unit}</td>
-                    <td>
-                      <input
-                        min="0"
-                        name={`quantity_${material.id}`}
-                        step="0.001"
-                        type="number"
-                        defaultValue={assignedMaterialById.get(material.id)?.assigned_quantity ?? ""}
-                      />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </TableWrap>
+          <WorkOrderMaterialsPicker
+            groups={groups ?? []}
+            initialAssigned={initialAssigned}
+            materials={materialOptions}
+          />
           <button className="button" type="submit">
             {sr.common.save}
           </button>

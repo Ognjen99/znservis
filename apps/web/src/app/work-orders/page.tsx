@@ -1,7 +1,7 @@
 import { sr } from "@znservis/i18n";
 import { createWorkOrderAction } from "@/app/actions";
 import { AdminShell } from "@/components/AdminShell";
-import { TableWrap } from "@/components/TableWrap";
+import { WorkOrderMaterialsPicker } from "@/components/WorkOrderMaterialsPicker";
 import { WorkOrdersCatalog } from "@/components/WorkOrdersCatalog";
 import { requireAdmin } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -60,10 +60,16 @@ export default async function WorkOrdersPage() {
   await requireAdmin();
   const supabase = await createSupabaseServerClient();
 
-  const [{ data: locations }, { data: workers }, { data: materials }, { data: workOrders }] = await Promise.all([
+  const [{ data: locations }, { data: workers }, { data: groups }, { data: materials }, { data: workOrders }] =
+    await Promise.all([
     supabase.from("locations").select("id, name").eq("active", true).order("name"),
     supabase.from("profiles").select("id, full_name").eq("role", "worker").eq("active", true).order("full_name"),
-    supabase.from("materials").select("id, name, unit").eq("active", true).order("name"),
+    supabase.from("material_groups").select("id, name").order("name"),
+    supabase
+      .from("materials")
+      .select("id, name, unit, group_id, material_groups(name)")
+      .eq("active", true)
+      .order("name"),
     supabase
       .from("work_orders")
       .select(
@@ -72,6 +78,20 @@ export default async function WorkOrdersPage() {
       .order("created_at", { ascending: false })
       .limit(500)
   ]);
+
+  const materialOptions = ((materials ?? []) as Array<{
+    id: string;
+    name: string;
+    unit: string;
+    group_id: string | null;
+    material_groups: SupabaseRelation<{ name: string }>;
+  }>).map((material) => ({
+    id: material.id,
+    name: material.name,
+    unit: material.unit,
+    group_id: material.group_id,
+    group_name: firstRelation(material.material_groups)?.name ?? null
+  }));
 
   const orderRows = ((workOrders ?? []) as WorkOrderRecord[]).map((order) => ({
     id: order.id,
@@ -136,46 +156,7 @@ export default async function WorkOrdersPage() {
             </div>
           </div>
 
-          <div className="field">
-            <label>{sr.workOrder.assignedMaterials}</label>
-            <TableWrap>
-              <table className="table">
-                <thead>
-                  <tr>
-                    <th>Materijal</th>
-                    <th>Jedinica</th>
-                    <th>{sr.workOrder.assignedQuantity}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(materials ?? []).map((material) => (
-                    <tr key={material.id}>
-                      <td>
-                        {material.name}
-                        <input name="material_id" type="hidden" value={material.id} />
-                      </td>
-                      <td>{material.unit}</td>
-                      <td>
-                        <input
-                          min="0"
-                          name={`quantity_${material.id}`}
-                          placeholder="0"
-                          step="0.001"
-                          type="number"
-                        />
-                      </td>
-                    </tr>
-                  ))}
-                  {(materials ?? []).length === 0 ? (
-                    <tr>
-                      <td colSpan={3}>{sr.common.empty}</td>
-                    </tr>
-                  ) : null}
-                </tbody>
-              </table>
-            </TableWrap>
-            <p className="muted table-subtext">Unesite kolicinu samo za materijale koje radnici smeju da koriste.</p>
-          </div>
+          <WorkOrderMaterialsPicker groups={groups ?? []} materials={materialOptions} />
 
           <button className="button" type="submit">
             {sr.common.add}

@@ -441,6 +441,19 @@ textarea {
   padding: 10px 12px;
 }
 
+.material-picker {
+  display: grid;
+  gap: 16px;
+}
+
+.material-picker-search {
+  background: #f8fafc;
+}
+
+.material-picker-search h4 {
+  margin: 0 0 12px;
+}
+
 .button-secondary {
   background: #e5e7eb;
   color: var(--text);
