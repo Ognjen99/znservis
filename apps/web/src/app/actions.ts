@@ -512,7 +512,7 @@ export async function createWorkOrderAction(formData: FormData) {
     .from("work_orders")
     .insert({
       ...input,
-      status: workerIds.length > 0 ? "assigned" : "created",
+      status: "in_progress",
       created_by: profile.id
     })
     .select("id")
@@ -633,23 +633,6 @@ export async function assignWorkOrderWorkersAction(formData: FormData) {
 
   if (insertError) {
     throw new Error(insertError.message);
-  }
-
-  const { data: order } = await supabase
-    .from("work_orders")
-    .select("status")
-    .eq("id", input.work_order_id)
-    .maybeSingle();
-
-  if (order?.status === "created") {
-    const { error: statusError } = await supabase
-      .from("work_orders")
-      .update({ status: "assigned" })
-      .eq("id", input.work_order_id);
-
-    if (statusError) {
-      throw new Error(statusError.message);
-    }
   }
 
   revalidatePath("/work-orders");

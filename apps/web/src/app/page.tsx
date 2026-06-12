@@ -33,8 +33,11 @@ export default async function DashboardPage() {
       supabase
         .from("work_orders")
         .select("id", { count: "exact", head: true })
-        .in("status", ["assigned", "in_progress", "on_hold"]),
-      supabase.from("work_reports").select("id", { count: "exact", head: true }),
+        .eq("status", "in_progress"),
+      supabase
+        .from("work_orders")
+        .select("id", { count: "exact", head: true })
+        .eq("status", "completed"),
       supabase
         .from("profiles")
         .select("id", { count: "exact", head: true })
@@ -46,6 +49,7 @@ export default async function DashboardPage() {
       supabase
         .from("work_orders")
         .select("id, title, status, scheduled_start, scheduled_end, locations(name)")
+        .eq("status", "in_progress")
         .order("created_at", { ascending: false })
         .limit(8)
     ]);
@@ -74,7 +78,7 @@ export default async function DashboardPage() {
           <div className="metric">{activeOrdersCount ?? 0}</div>
         </article>
         <article className="card">
-          <span className="muted">Dnevni zapisi</span>
+          <span className="muted">Zavrseni nalozi</span>
           <div className="metric">{reportsCount ?? 0}</div>
         </article>
         <article className="card">

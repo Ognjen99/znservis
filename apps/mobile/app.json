@@ -5,20 +5,33 @@
     "version": "0.1.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
-    "assetBundlePatterns": ["**/*"],
+    "icon": "./assets/ikonicazaphone.png",
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "splash": {
-      "image": "./assets/Logo-ZN.webp",
+      "image": "./assets/ikonicazaphone.png",
       "resizeMode": "contain",
-      "backgroundColor": "#f6f7f9"
+      "backgroundColor": "#000000"
     },
     "android": {
-      "package": "com.znservis.worker"
+      "package": "com.znservis.worker",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/ikonicazaphone.png",
+        "backgroundColor": "#000000"
+      }
+    },
+    "experiments": {
+      "autolinkingModuleResolution": true
     },
     "plugins": [
       "expo-sqlite"
     ],
     "extra": {
-      "supabaseUrl": "https://ndendumuirrlcmcjewoh.supabase.co"
+      "supabaseUrl": "https://ndendumuirrlcmcjewoh.supabase.co",
+      "eas": {
+        "projectId": "4678d490-978e-4dcb-85c6-1fd249420709"
+      }
     }
   }
 }

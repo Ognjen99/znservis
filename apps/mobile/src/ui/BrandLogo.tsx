@@ -1,7 +1,7 @@
 import { Image } from "react-native";
 import { styles } from "@/ui/styles";
 
-const logo = require("../../assets/Logo-ZN.webp");
+const logo = require("../../assets/ikonicazaphone.png");
 
 type BrandLogoProps = {
   compact?: boolean;

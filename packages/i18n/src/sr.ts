@@ -51,13 +51,11 @@ export const sr = {
     uploadPlan: "Dodaj PDF/sliku plana",
     scheduledStart: "Planirani pocetak",
     scheduledEnd: "Planirani kraj",
+    complete: "Zavrsi nalog",
+    completedAt: "Zavrseno",
     statuses: {
-      created: "Kreiran",
-      assigned: "Dodeljen",
       in_progress: "U toku",
-      on_hold: "Na cekanju",
-      completed: "Zavrsen",
-      cancelled: "Otkazan"
+      completed: "Zavrsen"
     }
   },
   admin: {

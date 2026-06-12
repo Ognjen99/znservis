@@ -3,6 +3,7 @@ node_modules/
 
 # build outputs
 .next/
+.vercel-test/
 dist/
 build/
 coverage/

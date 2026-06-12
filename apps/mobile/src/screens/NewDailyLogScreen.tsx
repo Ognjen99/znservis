@@ -1,72 +1,64 @@
 import { Picker } from "@react-native-picker/picker";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Alert, Text, TextInput, TouchableOpacity, View } from "react-native";
-import { CreateWorkReportSchema, type CreateWorkReportInput } from "@znservis/shared";
+import { CreateDailyLogSchema, type CreateDailyLogInput } from "@znservis/shared";
 import { sr } from "@znservis/i18n";
-import type { CatalogLocation, CatalogMaterial } from "@/lib/localDb";
+import type { CachedWorkOrderWithDetails } from "@/lib/localDb";
 import { BrandLogo } from "@/ui/BrandLogo";
 import { ResponsiveScreen } from "@/ui/ResponsiveScreen";
-import { styles, colors } from "@/ui/styles";
+import { styles } from "@/ui/styles";
 
 type DraftItem = {
   material_id: string;
   quantity: number;
 };
 
-export type ReportFormInitialValues = {
-  location_id: string;
-  performed_at: string;
-  notes: string | null;
-  items: DraftItem[];
-};
-
-type NewReportScreenProps = {
-  locations: CatalogLocation[];
-  materials: CatalogMaterial[];
-  mode?: "create" | "edit";
-  initialValues?: ReportFormInitialValues;
+type NewDailyLogScreenProps = {
+  workOrder: CachedWorkOrderWithDetails;
   onCancel: () => void;
-  onSubmit: (report: CreateWorkReportInput) => Promise<void>;
+  onSubmit: (log: CreateDailyLogInput) => Promise<void>;
 };
 
-export function NewReportScreen({
-  locations,
-  materials,
-  mode = "create",
-  initialValues,
-  onCancel,
-  onSubmit
-}: NewReportScreenProps) {
-  const [locationId, setLocationId] = useState(initialValues?.location_id ?? locations[0]?.id ?? "");
-  const [materialId, setMaterialId] = useState(materials[0]?.id ?? "");
+function todayDate() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+export function NewDailyLogScreen({ workOrder, onCancel, onSubmit }: NewDailyLogScreenProps) {
+  const availableMaterials = workOrder.materials.filter((material) => material.remaining_quantity > 0);
+  const [workDate, setWorkDate] = useState(todayDate());
+  const [materialId, setMaterialId] = useState(availableMaterials[0]?.material_id ?? "");
   const [quantity, setQuantity] = useState("1");
-  const [notes, setNotes] = useState(initialValues?.notes ?? "");
-  const [items, setItems] = useState<DraftItem[]>(initialValues?.items ?? []);
+  const [notes, setNotes] = useState("");
+  const [items, setItems] = useState<DraftItem[]>([]);
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
-    if (!initialValues) {
-      return;
-    }
-
-    setLocationId(initialValues.location_id);
-    setNotes(initialValues.notes ?? "");
-    setItems(initialValues.items);
-  }, [initialValues]);
-
   const materialById = useMemo(
-    () => Object.fromEntries(materials.map((material) => [material.id, material])),
-    [materials]
+    () => Object.fromEntries(workOrder.materials.map((material) => [material.material_id, material])),
+    [workOrder.materials]
   );
 
+  function usedInDraft(nextMaterialId: string) {
+    return items
+      .filter((item) => item.material_id === nextMaterialId)
+      .reduce((total, item) => total + item.quantity, 0);
+  }
+
   function addItem() {
+    const material = materialById[materialId];
     const parsedQuantity = Number(quantity);
-    if (!materialId || Number.isNaN(parsedQuantity) || parsedQuantity <= 0) {
+
+    if (!material || Number.isNaN(parsedQuantity) || parsedQuantity <= 0) {
       Alert.alert("Greska", "Izaberite materijal i unesite kolicinu vecu od nule.");
       return;
     }
 
-    setItems((current) => [...current, { material_id: materialId, quantity: parsedQuantity }]);
+    const remainingAfterDraft = material.remaining_quantity - usedInDraft(material.material_id);
+    if (parsedQuantity > remainingAfterDraft) {
+      Alert.alert("Greska", `Preostalo je ${remainingAfterDraft} ${material.unit}.`);
+      return;
+    }
+
+    setItems((current) => [...current, { material_id: material.material_id, quantity: parsedQuantity }]);
     setQuantity("1");
   }
 
@@ -74,16 +66,18 @@ export function NewReportScreen({
     setItems((current) => current.filter((_, itemIndex) => itemIndex !== index));
   }
 
-  async function saveReport() {
-    const parsed = CreateWorkReportSchema.safeParse({
-      location_id: locationId,
-      performed_at: initialValues?.performed_at ?? new Date().toISOString(),
+  async function saveLog() {
+    const parsed = CreateDailyLogSchema.safeParse({
+      work_order_id: workOrder.id,
+      location_id: workOrder.location_id,
+      work_date: workDate,
+      performed_at: `${workDate}T12:00:00.000Z`,
       notes: notes.trim() || null,
       items
     });
 
     if (!parsed.success) {
-      Alert.alert("Greska", "Izaberite lokaciju i dodajte bar jedan materijal.");
+      Alert.alert("Greska", "Unesite datum i dodajte bar jedan dodeljeni materijal.");
       return;
     }
 
@@ -96,28 +90,27 @@ export function NewReportScreen({
     <ResponsiveScreen keyboardAvoiding>
       <View style={styles.card}>
         <BrandLogo compact />
-        <Text style={styles.title}>{mode === "edit" ? sr.report.edit : sr.report.new}</Text>
-        <Text style={styles.subtitle}>Izvestaj se prvo cuva na telefonu, zatim se sinhronizuje.</Text>
+        <Text style={styles.title}>{sr.workOrder.newDailyLog}</Text>
+        <Text style={styles.subtitle}>{workOrder.title}</Text>
       </View>
 
       <View style={styles.card}>
-        <Text style={styles.label}>{sr.report.location}</Text>
-        <View style={styles.input}>
-          <Picker selectedValue={locationId} onValueChange={setLocationId}>
-            {locations.map((location) => (
-              <Picker.Item key={location.id} label={location.name} value={location.id} />
-            ))}
-          </Picker>
-        </View>
+        <Text style={styles.label}>{sr.report.date}</Text>
+        <TextInput
+          onChangeText={setWorkDate}
+          placeholder="YYYY-MM-DD"
+          style={styles.input}
+          value={workDate}
+        />
 
         <Text style={styles.label}>{sr.report.material}</Text>
         <View style={styles.input}>
           <Picker selectedValue={materialId} onValueChange={setMaterialId}>
-            {materials.map((material) => (
+            {availableMaterials.map((material) => (
               <Picker.Item
-                key={material.id}
-                label={`${material.name} (${material.unit})`}
-                value={material.id}
+                key={material.material_id}
+                label={`${material.material_name} (${material.remaining_quantity} ${material.unit})`}
+                value={material.material_id}
               />
             ))}
           </Picker>
@@ -130,7 +123,7 @@ export function NewReportScreen({
           style={styles.input}
           value={quantity}
         />
-        <TouchableOpacity onPress={addItem} style={styles.secondaryButton}>
+        <TouchableOpacity disabled={availableMaterials.length === 0} onPress={addItem} style={styles.secondaryButton}>
           <Text style={styles.secondaryButtonText}>Dodaj materijal</Text>
         </TouchableOpacity>
       </View>
@@ -142,14 +135,14 @@ export function NewReportScreen({
           return (
             <View key={`${item.material_id}-${index}`} style={styles.itemRow}>
               <Text style={{ flex: 1 }}>
-                {material?.name ?? item.material_id}: {item.quantity} {material?.unit ?? ""}
+                {material?.material_name ?? item.material_id}: {item.quantity} {material?.unit ?? ""}
               </Text>
               <TouchableOpacity
                 accessibilityLabel="Ukloni materijal"
                 onPress={() => removeItem(index)}
                 style={styles.removeButton}
               >
-                <Text style={styles.removeButtonText}>×</Text>
+                <Text style={styles.removeButtonText}>x</Text>
               </TouchableOpacity>
             </View>
           );
@@ -166,7 +159,7 @@ export function NewReportScreen({
           style={[styles.input, { minHeight: 100, textAlignVertical: "top" }]}
           value={notes}
         />
-        <TouchableOpacity disabled={saving} onPress={saveReport} style={styles.button}>
+        <TouchableOpacity disabled={saving} onPress={saveLog} style={styles.button}>
           <Text style={styles.buttonText}>{saving ? sr.common.loading : sr.common.save}</Text>
         </TouchableOpacity>
         <TouchableOpacity onPress={onCancel} style={styles.secondaryButton}>

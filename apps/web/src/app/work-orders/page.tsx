@@ -12,7 +12,6 @@ type WorkOrderRecord = {
   title: string;
   description: string | null;
   location_id: string;
-  status: "created" | "assigned" | "in_progress" | "on_hold" | "completed" | "cancelled";
   scheduled_start: string | null;
   scheduled_end: string | null;
   created_at: string;
@@ -75,6 +74,7 @@ export default async function WorkOrdersPage() {
       .select(
         "id, title, description, location_id, status, scheduled_start, scheduled_end, created_at, locations(name, address), work_order_assignees(worker_id, profiles(full_name)), work_order_materials(material_id, assigned_quantity, materials(name, unit)), work_reports(work_report_items(material_id, quantity))"
       )
+      .eq("status", "in_progress")
       .order("created_at", { ascending: false })
       .limit(500)
   ]);
@@ -98,7 +98,6 @@ export default async function WorkOrdersPage() {
     title: order.title,
     description: order.description,
     location_id: order.location_id,
-    status: order.status,
     scheduled_start: order.scheduled_start,
     scheduled_end: order.scheduled_end,
     created_at: order.created_at,

@@ -2,35 +2,31 @@ import NetInfo from "@react-native-community/netinfo";
 import type { Session } from "@supabase/supabase-js";
 import { useEffect, useState } from "react";
 import { Alert, AppState, BackHandler } from "react-native";
-import type { CreateWorkReportInput } from "@znservis/shared";
+import type { CreateDailyLogInput } from "@znservis/shared";
 import {
-  countPendingReports,
-  enqueueReport,
-  getCatalog,
-  getPendingReport,
+  countPendingDailyLogs,
+  enqueueDailyLog,
+  getCachedWorkOrder,
   migrateLocalDb,
-  updatePendingReport,
-  type CatalogLocation,
-  type CatalogMaterial
+  type CachedWorkOrderWithDetails
 } from "@/lib/localDb";
-import { flushReportOutbox, refreshCatalog, syncNow, updateRemoteReport } from "@/lib/sync";
+import { flushDailyLogOutbox, refreshWorkOrders, syncNow } from "@/lib/sync";
 import { supabase } from "@/lib/supabase";
 import { HomeScreen } from "@/screens/HomeScreen";
 import { LoginScreen } from "@/screens/LoginScreen";
-import { MyReportsScreen, type EditableReportRef } from "@/screens/MyReportsScreen";
-import { NewReportScreen, type ReportFormInitialValues } from "@/screens/NewReportScreen";
+import { MyDailyLogsScreen } from "@/screens/MyDailyLogsScreen";
+import { MyWorkOrdersScreen } from "@/screens/MyWorkOrdersScreen";
+import { NewDailyLogScreen } from "@/screens/NewDailyLogScreen";
+import { WorkOrderDetailScreen } from "@/screens/WorkOrderDetailScreen";
 
-type Screen = "home" | "new-report" | "my-reports" | "edit-report";
+type Screen = "home" | "work-orders" | "work-order-detail" | "new-daily-log" | "daily-logs";
 
 export default function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [screen, setScreen] = useState<Screen>("home");
-  const [locations, setLocations] = useState<CatalogLocation[]>([]);
-  const [materials, setMaterials] = useState<CatalogMaterial[]>([]);
   const [pendingCount, setPendingCount] = useState(0);
-  const [editingReport, setEditingReport] = useState<EditableReportRef | null>(null);
-  const [editInitialValues, setEditInitialValues] = useState<ReportFormInitialValues | null>(null);
-  const [loadingEdit, setLoadingEdit] = useState(false);
+  const [selectedWorkOrderId, setSelectedWorkOrderId] = useState<string | null>(null);
+  const [dailyLogOrder, setDailyLogOrder] = useState<CachedWorkOrderWithDetails | null>(null);
   const [workerName, setWorkerName] = useState<string | null>(null);
 
   async function loadWorkerProfile(userId: string) {
@@ -39,12 +35,7 @@ export default function App() {
   }
 
   async function loadLocalState() {
-    const [{ locations: cachedLocations, materials: cachedMaterials }, count] = await Promise.all([
-      getCatalog(),
-      countPendingReports()
-    ]);
-    setLocations(cachedLocations);
-    setMaterials(cachedMaterials);
+    const count = await countPendingDailyLogs();
     setPendingCount(count);
   }
 
@@ -87,7 +78,7 @@ export default function App() {
   useEffect(() => {
     const unsubscribeNetwork = NetInfo.addEventListener((state) => {
       if (state.isConnected && session) {
-        void flushReportOutbox().then(loadLocalState);
+        void flushDailyLogOutbox().then(runSync);
       }
     });
 
@@ -113,20 +104,20 @@ export default function App() {
         return false;
       }
 
-      if (screen === "new-report") {
+      if (screen === "work-orders" || screen === "daily-logs") {
         setScreen("home");
         return true;
       }
 
-      if (screen === "my-reports") {
-        setScreen("home");
+      if (screen === "work-order-detail") {
+        setSelectedWorkOrderId(null);
+        setScreen("work-orders");
         return true;
       }
 
-      if (screen === "edit-report") {
-        setEditingReport(null);
-        setEditInitialValues(null);
-        setScreen("my-reports");
+      if (screen === "new-daily-log") {
+        setDailyLogOrder(null);
+        setScreen("work-order-detail");
         return true;
       }
 
@@ -137,89 +128,26 @@ export default function App() {
     return () => subscription.remove();
   }, [screen, session]);
 
-  async function submitReport(report: CreateWorkReportInput) {
+  async function submitDailyLog(log: CreateDailyLogInput) {
     if (!session?.user.id) return;
 
-    await enqueueReport(session.user.id, report);
+    await enqueueDailyLog(session.user.id, log);
     await loadLocalState();
-    Alert.alert("Sacuvano", "Izvestaj je sacuvan i bice sinhronizovan.");
-    setScreen("home");
-    void flushReportOutbox().then(loadLocalState);
+    Alert.alert("Sacuvano", "Dnevni zapis je sacuvan i bice sinhronizovan.");
+    setDailyLogOrder(null);
+    setScreen("work-order-detail");
+    void flushDailyLogOutbox().then(runSync);
   }
 
-  async function openEditReport(reportRef: EditableReportRef) {
-    setLoadingEdit(true);
-    setEditingReport(reportRef);
-
-    try {
-      if (reportRef.source === "local") {
-        const pending = await getPendingReport(reportRef.id);
-        if (!pending) {
-          Alert.alert("Greska", "Lokalni izvestaj nije pronadjen.");
-          return;
-        }
-
-        setEditInitialValues({
-          location_id: pending.report.location_id,
-          performed_at: pending.report.performed_at,
-          notes: pending.report.notes,
-          items: pending.items.map((item) => ({
-            material_id: item.material_id,
-            quantity: item.quantity
-          }))
-        });
-      } else {
-        const { data, error } = await supabase
-          .from("work_reports")
-          .select("location_id, performed_at, notes, work_report_items(material_id, quantity)")
-          .eq("id", reportRef.id)
-          .single();
-
-        if (error || !data) {
-          Alert.alert("Greska", "Izvestaj nije pronadjen.");
-          return;
-        }
-
-        setEditInitialValues({
-          location_id: data.location_id,
-          performed_at: data.performed_at,
-          notes: data.notes,
-          items: (data.work_report_items ?? []).map((item: { material_id: string; quantity: number }) => ({
-            material_id: item.material_id,
-            quantity: item.quantity
-          }))
-        });
-      }
-
-      setScreen("edit-report");
-    } finally {
-      setLoadingEdit(false);
-    }
-  }
-
-  async function submitEditedReport(report: CreateWorkReportInput) {
-    if (!editingReport) {
+  async function openNewDailyLog(workOrderId: string) {
+    const order = await getCachedWorkOrder(workOrderId);
+    if (!order) {
+      Alert.alert("Greska", "Radni nalog nije pronadjen. Sinhronizujte aplikaciju.");
       return;
     }
 
-    try {
-      if (editingReport.source === "local") {
-        await updatePendingReport(editingReport.id, report);
-        await loadLocalState();
-        Alert.alert("Sacuvano", "Lokalni izvestaj je azuriran.");
-        void flushReportOutbox().then(loadLocalState);
-      } else {
-        await updateRemoteReport(editingReport.id, report);
-        Alert.alert("Sacuvano", "Izvestaj je azuriran.");
-      }
-
-      setEditingReport(null);
-      setEditInitialValues(null);
-      setScreen("my-reports");
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Greska pri cuvanju izvestaja.";
-      Alert.alert("Greska", message);
-    }
+    setDailyLogOrder(order);
+    setScreen("new-daily-log");
   }
 
   async function logout() {
@@ -227,54 +155,51 @@ export default function App() {
     setScreen("home");
     setSession(null);
     setWorkerName(null);
-    setEditingReport(null);
-    setEditInitialValues(null);
+    setSelectedWorkOrderId(null);
+    setDailyLogOrder(null);
   }
 
   if (!session) {
     return <LoginScreen />;
   }
 
-  if (screen === "new-report") {
+  if (screen === "work-orders") {
     return (
-      <NewReportScreen
-        locations={locations}
-        materials={materials}
-        onCancel={() => setScreen("home")}
-        onSubmit={submitReport}
-      />
-    );
-  }
-
-  if (screen === "edit-report" && editInitialValues) {
-    return (
-      <NewReportScreen
-        initialValues={editInitialValues}
-        locations={locations}
-        materials={materials}
-        mode="edit"
-        onCancel={() => {
-          setEditingReport(null);
-          setEditInitialValues(null);
-          setScreen("my-reports");
-        }}
-        onSubmit={submitEditedReport}
-      />
-    );
-  }
-
-  if (screen === "my-reports") {
-    return (
-      <MyReportsScreen
+      <MyWorkOrdersScreen
         onBack={() => setScreen("home")}
-        onEdit={(report) => {
-          if (loadingEdit) {
-            return;
-          }
-          void openEditReport(report);
+        onOpen={(workOrderId) => {
+          setSelectedWorkOrderId(workOrderId);
+          setScreen("work-order-detail");
         }}
       />
     );
+  }
+
+  if (screen === "work-order-detail" && selectedWorkOrderId) {
+    return (
+      <WorkOrderDetailScreen
+        workOrderId={selectedWorkOrderId}
+        onBack={() => setScreen("work-orders")}
+        onNewDailyLog={(workOrderId) => void openNewDailyLog(workOrderId)}
+      />
+    );
+  }
+
+  if (screen === "new-daily-log" && dailyLogOrder) {
+    return (
+      <NewDailyLogScreen
+        workOrder={dailyLogOrder}
+        onCancel={() => {
+          setDailyLogOrder(null);
+          setScreen("work-order-detail");
+        }}
+        onSubmit={submitDailyLog}
+      />
+    );
+  }
+
+  if (screen === "daily-logs") {
+    return <MyDailyLogsScreen onBack={() => setScreen("home")} />;
   }
 
   return (
@@ -282,14 +207,10 @@ export default function App() {
       pendingCount={pendingCount}
       workerName={workerName}
       onLogout={logout}
-      onMyReports={() => setScreen("my-reports")}
-      onNewReport={() => {
-        if (!locations.length || !materials.length) {
-          Alert.alert("Katalog nije ucitan", "Sinhronizujte aplikaciju pre kreiranja izvestaja.");
-          void refreshCatalog().then(loadLocalState);
-          return;
-        }
-        setScreen("new-report");
+      onMyDailyLogs={() => setScreen("daily-logs")}
+      onMyWorkOrders={() => {
+        setScreen("work-orders");
+        void refreshWorkOrders();
       }}
       onSync={runSync}
     />

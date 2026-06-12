@@ -1,12 +1,11 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
-import { workOrderStatusLabels, workOrderStatuses, type WorkOrderStatus } from "@znservis/shared";
+import { notFound, redirect } from "next/navigation";
+import { type WorkOrderStatus } from "@znservis/shared";
 import { sr } from "@znservis/i18n";
 import {
   assignWorkOrderWorkersAction,
   deleteWorkOrderAttachmentAction,
   setWorkOrderMaterialsAction,
-  setWorkOrderStatusAction,
   updateWorkOrderAction,
   uploadWorkOrderPlanAction
 } from "@/app/actions";
@@ -116,6 +115,10 @@ export default async function WorkOrderDetailPage({ params }: PageProps) {
   }
 
   const workOrder = order as WorkOrderRecord;
+
+  if (workOrder.status === "completed") {
+    redirect(`/reports/${id}`);
+  }
   const location = firstRelation(workOrder.locations);
   const assignedWorkerIds = new Set(workOrder.work_order_assignees.map((assignee) => assignee.worker_id));
   const usageRows = usageFor(workOrder);
@@ -197,24 +200,9 @@ export default async function WorkOrderDetailPage({ params }: PageProps) {
 
         <article className="card">
           <h3>{sr.workOrder.status}</h3>
-          <form action={setWorkOrderStatusAction} className="form">
-            <input name="id" type="hidden" value={workOrder.id} />
-            <div className="field">
-              <label htmlFor="status">{sr.workOrder.status}</label>
-              <select id="status" name="status" defaultValue={workOrder.status}>
-                {workOrderStatuses.map((status) => (
-                  <option key={status} value={status}>
-                    {workOrderStatusLabels[status]}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <button className="button" type="submit">
-              {sr.common.save}
-            </button>
-          </form>
+          <p className="badge">{sr.workOrder.statuses.in_progress}</p>
           <p className="muted table-subtext">
-            Dnevni zapisi su dozvoljeni samo kada je nalog dodeljen ili u toku.
+            Radnik zavrsava nalog u mobilnoj aplikaciji. Zavrseni nalozi prelaze u Izvestaje.
           </p>
         </article>
       </section>
