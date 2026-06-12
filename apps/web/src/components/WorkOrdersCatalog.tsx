@@ -178,11 +178,6 @@ export function WorkOrdersCatalog({ workOrders, locations, workers }: WorkOrders
                   <td>
                     <strong>{order.title}</strong>
                     {order.description ? <div className="muted table-subtext">{order.description}</div> : null}
-                    {order.scheduled_start || order.scheduled_end ? (
-                      <div className="muted table-subtext">
-                        {order.scheduled_start ?? "?"} - {order.scheduled_end ?? "?"}
-                      </div>
-                    ) : null}
                   </td>
                   <td>
                     <span className={order.status === "cancelled" ? "badge badge-inactive" : "badge"}>

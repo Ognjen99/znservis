@@ -96,7 +96,6 @@ export default async function DashboardPage() {
                 <th>Nalog</th>
                 <th>Status</th>
                 <th>Lokacija</th>
-                <th>Plan</th>
               </tr>
             </thead>
             <tbody>
@@ -105,16 +104,11 @@ export default async function DashboardPage() {
                   <td>{order.title}</td>
                   <td>{workOrderStatusLabels[order.status]}</td>
                   <td>{order.locations?.name ?? "-"}</td>
-                  <td>
-                    {order.scheduled_start || order.scheduled_end
-                      ? `${order.scheduled_start ?? "?"} - ${order.scheduled_end ?? "?"}`
-                      : "-"}
-                  </td>
                 </tr>
               ))}
               {orders.length === 0 ? (
                 <tr>
-                  <td colSpan={4}>{sr.common.empty}</td>
+                  <td colSpan={3}>{sr.common.empty}</td>
                 </tr>
               ) : null}
             </tbody>

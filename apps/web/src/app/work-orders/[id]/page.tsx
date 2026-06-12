@@ -156,26 +156,6 @@ export default async function WorkOrderDetailPage({ params }: PageProps) {
                 ))}
               </select>
             </div>
-            <div className="grid grid-2">
-              <div className="field">
-                <label htmlFor="scheduled_start">{sr.workOrder.scheduledStart}</label>
-                <input
-                  id="scheduled_start"
-                  name="scheduled_start"
-                  type="date"
-                  defaultValue={workOrder.scheduled_start ?? ""}
-                />
-              </div>
-              <div className="field">
-                <label htmlFor="scheduled_end">{sr.workOrder.scheduledEnd}</label>
-                <input
-                  id="scheduled_end"
-                  name="scheduled_end"
-                  type="date"
-                  defaultValue={workOrder.scheduled_end ?? ""}
-                />
-              </div>
-            </div>
             <div className="field">
               <label htmlFor="description">{sr.workOrder.description}</label>
               <textarea id="description" name="description" rows={4} defaultValue={workOrder.description ?? ""} />

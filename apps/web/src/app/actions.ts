@@ -494,15 +494,25 @@ export async function createWorkOrderAction(formData: FormData) {
     title: formData.get("title"),
     description: nullableString(formData.get("description")),
     location_id: formData.get("location_id"),
-    scheduled_start: nullableDate(formData.get("scheduled_start")),
-    scheduled_end: nullableDate(formData.get("scheduled_end"))
+    scheduled_start: null,
+    scheduled_end: null
   });
+
+  const workerIds = formData.getAll("worker_id").map(String);
+  const materialIds = formData.getAll("material_id").map(String);
+  const materials = materialIds
+    .map((materialId) => ({
+      material_id: materialId,
+      assigned_quantity: String(formData.get(`quantity_${materialId}`) ?? "").trim()
+    }))
+    .filter((material) => material.assigned_quantity.length > 0 && Number(material.assigned_quantity) > 0);
 
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase
     .from("work_orders")
     .insert({
       ...input,
+      status: workerIds.length > 0 ? "assigned" : "created",
       created_by: profile.id
     })
     .select("id")
@@ -510,6 +520,38 @@ export async function createWorkOrderAction(formData: FormData) {
 
   if (error) {
     throw new Error(error.message);
+  }
+
+  if (workerIds.length > 0) {
+    const { error: assignError } = await supabase.from("work_order_assignees").insert(
+      workerIds.map((workerId) => ({
+        work_order_id: data.id,
+        worker_id: workerId
+      }))
+    );
+
+    if (assignError) {
+      throw new Error(assignError.message);
+    }
+  }
+
+  if (materials.length > 0) {
+    const parsedMaterials = AssignWorkOrderMaterialsSchema.parse({
+      work_order_id: data.id,
+      materials
+    });
+
+    const { error: materialsError } = await supabase.from("work_order_materials").insert(
+      parsedMaterials.materials.map((material) => ({
+        work_order_id: data.id,
+        material_id: material.material_id,
+        assigned_quantity: material.assigned_quantity
+      }))
+    );
+
+    if (materialsError) {
+      throw new Error(materialsError.message);
+    }
   }
 
   revalidatePath("/work-orders");
@@ -529,8 +571,8 @@ export async function updateWorkOrderAction(formData: FormData) {
     title: formData.get("title"),
     description: nullableString(formData.get("description")),
     location_id: formData.get("location_id"),
-    scheduled_start: nullableDate(formData.get("scheduled_start")),
-    scheduled_end: nullableDate(formData.get("scheduled_end"))
+    scheduled_start: null,
+    scheduled_end: null
   });
 
   const supabase = await createSupabaseServerClient();
@@ -593,6 +635,23 @@ export async function assignWorkOrderWorkersAction(formData: FormData) {
     throw new Error(insertError.message);
   }
 
+  const { data: order } = await supabase
+    .from("work_orders")
+    .select("status")
+    .eq("id", input.work_order_id)
+    .maybeSingle();
+
+  if (order?.status === "created") {
+    const { error: statusError } = await supabase
+      .from("work_orders")
+      .update({ status: "assigned" })
+      .eq("id", input.work_order_id);
+
+    if (statusError) {
+      throw new Error(statusError.message);
+    }
+  }
+
   revalidatePath("/work-orders");
   revalidatePath(`/work-orders/${input.work_order_id}`);
 }
@@ -609,22 +668,26 @@ export async function setWorkOrderMaterialsAction(formData: FormData) {
     }))
     .filter((material) => material.assigned_quantity.length > 0 && Number(material.assigned_quantity) > 0);
 
-  const input = AssignWorkOrderMaterialsSchema.parse({
-    work_order_id: workOrderId,
-    materials
-  });
+  if (materials.length > 0) {
+    AssignWorkOrderMaterialsSchema.parse({
+      work_order_id: workOrderId,
+      materials
+    });
+  } else if (!workOrderId) {
+    throw new Error("Nedostaje ID radnog naloga.");
+  }
 
   const supabase = await createSupabaseServerClient();
   const { data: existing, error: fetchError } = await supabase
     .from("work_order_materials")
     .select("material_id")
-    .eq("work_order_id", input.work_order_id);
+    .eq("work_order_id", workOrderId);
 
   if (fetchError) {
     throw new Error(fetchError.message);
   }
 
-  const nextMaterialIds = new Set(input.materials.map((material) => material.material_id));
+  const nextMaterialIds = new Set(materials.map((material) => material.material_id));
   const removedMaterialIds = (existing ?? [])
     .map((material) => material.material_id)
     .filter((materialId) => !nextMaterialIds.has(materialId));
@@ -633,7 +696,7 @@ export async function setWorkOrderMaterialsAction(formData: FormData) {
     const { error: deleteError } = await supabase
       .from("work_order_materials")
       .delete()
-      .eq("work_order_id", input.work_order_id)
+      .eq("work_order_id", workOrderId)
       .eq("material_id", materialId);
 
     if (deleteError) {
@@ -641,23 +704,25 @@ export async function setWorkOrderMaterialsAction(formData: FormData) {
     }
   }
 
-  const { error: upsertError } = await supabase
-    .from("work_order_materials")
-    .upsert(
-      input.materials.map((material) => ({
-        work_order_id: input.work_order_id,
-        material_id: material.material_id,
-        assigned_quantity: material.assigned_quantity
-      })),
-      { onConflict: "work_order_id,material_id" }
-    );
+  if (materials.length > 0) {
+    const { error: upsertError } = await supabase
+      .from("work_order_materials")
+      .upsert(
+        materials.map((material) => ({
+          work_order_id: workOrderId,
+          material_id: material.material_id,
+          assigned_quantity: material.assigned_quantity
+        })),
+        { onConflict: "work_order_id,material_id" }
+      );
 
-  if (upsertError) {
-    throw new Error(upsertError.message);
+    if (upsertError) {
+      throw new Error(upsertError.message);
+    }
   }
 
   revalidatePath("/work-orders");
-  revalidatePath(`/work-orders/${input.work_order_id}`);
+  revalidatePath(`/work-orders/${workOrderId}`);
 }
 
 export async function uploadWorkOrderPlanAction(formData: FormData) {

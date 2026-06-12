@@ -1,6 +1,7 @@
 import { sr } from "@znservis/i18n";
 import { createWorkOrderAction } from "@/app/actions";
 import { AdminShell } from "@/components/AdminShell";
+import { TableWrap } from "@/components/TableWrap";
 import { WorkOrdersCatalog } from "@/components/WorkOrdersCatalog";
 import { requireAdmin } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -59,9 +60,10 @@ export default async function WorkOrdersPage() {
   await requireAdmin();
   const supabase = await createSupabaseServerClient();
 
-  const [{ data: locations }, { data: workers }, { data: workOrders }] = await Promise.all([
+  const [{ data: locations }, { data: workers }, { data: materials }, { data: workOrders }] = await Promise.all([
     supabase.from("locations").select("id, name").eq("active", true).order("name"),
     supabase.from("profiles").select("id, full_name").eq("role", "worker").eq("active", true).order("full_name"),
+    supabase.from("materials").select("id, name, unit").eq("active", true).order("name"),
     supabase
       .from("work_orders")
       .select(
@@ -115,19 +117,66 @@ export default async function WorkOrdersPage() {
                 ))}
               </select>
             </div>
-            <div className="field">
-              <label htmlFor="scheduled_start">{sr.workOrder.scheduledStart}</label>
-              <input id="scheduled_start" name="scheduled_start" type="date" />
-            </div>
-            <div className="field">
-              <label htmlFor="scheduled_end">{sr.workOrder.scheduledEnd}</label>
-              <input id="scheduled_end" name="scheduled_end" type="date" />
-            </div>
           </div>
           <div className="field">
             <label htmlFor="description">{sr.workOrder.description}</label>
             <textarea id="description" name="description" rows={3} />
           </div>
+
+          <div className="field">
+            <label>{sr.workOrder.assignees}</label>
+            <div className="checkbox-grid">
+              {(workers ?? []).map((worker) => (
+                <label className="checkbox-row" key={worker.id}>
+                  <input name="worker_id" type="checkbox" value={worker.id} />
+                  {worker.full_name}
+                </label>
+              ))}
+              {(workers ?? []).length === 0 ? <p className="muted">{sr.common.empty}</p> : null}
+            </div>
+          </div>
+
+          <div className="field">
+            <label>{sr.workOrder.assignedMaterials}</label>
+            <TableWrap>
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Materijal</th>
+                    <th>Jedinica</th>
+                    <th>{sr.workOrder.assignedQuantity}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(materials ?? []).map((material) => (
+                    <tr key={material.id}>
+                      <td>
+                        {material.name}
+                        <input name="material_id" type="hidden" value={material.id} />
+                      </td>
+                      <td>{material.unit}</td>
+                      <td>
+                        <input
+                          min="0"
+                          name={`quantity_${material.id}`}
+                          placeholder="0"
+                          step="0.001"
+                          type="number"
+                        />
+                      </td>
+                    </tr>
+                  ))}
+                  {(materials ?? []).length === 0 ? (
+                    <tr>
+                      <td colSpan={3}>{sr.common.empty}</td>
+                    </tr>
+                  ) : null}
+                </tbody>
+              </table>
+            </TableWrap>
+            <p className="muted table-subtext">Unesite kolicinu samo za materijale koje radnici smeju da koriste.</p>
+          </div>
+
           <button className="button" type="submit">
             {sr.common.add}
           </button>
