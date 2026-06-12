@@ -1,14 +1,19 @@
 "use server";
 
 import {
+  AssignWorkOrderMaterialsSchema,
+  AssignWorkOrderWorkersSchema,
+  CreateWorkOrderSchema,
   CreateWorkerSchema,
   LocationSchema,
   MaterialGroupSchema,
   MaterialSchema,
+  UpdateWorkOrderStatusSchema,
   UpdateWorkerSchema,
   normalizeWorkerLoginName,
   workerAuthEmail
 } from "@znservis/shared";
+import { randomUUID } from "crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireAdmin } from "@/lib/auth";
@@ -18,6 +23,11 @@ import {
 } from "@/lib/supabase/server";
 
 function nullableString(value: FormDataEntryValue | null) {
+  const text = typeof value === "string" ? value.trim() : "";
+  return text.length ? text : null;
+}
+
+function nullableDate(value: FormDataEntryValue | null) {
   const text = typeof value === "string" ? value.trim() : "";
   return text.length ? text : null;
 }
@@ -474,5 +484,303 @@ export async function deleteReportAction(formData: FormData) {
   }
 
   revalidatePath("/reports");
+  revalidatePath("/");
+}
+
+export async function createWorkOrderAction(formData: FormData) {
+  const profile = await requireAdmin();
+
+  const input = CreateWorkOrderSchema.parse({
+    title: formData.get("title"),
+    description: nullableString(formData.get("description")),
+    location_id: formData.get("location_id"),
+    scheduled_start: nullableDate(formData.get("scheduled_start")),
+    scheduled_end: nullableDate(formData.get("scheduled_end"))
+  });
+
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from("work_orders")
+    .insert({
+      ...input,
+      created_by: profile.id
+    })
+    .select("id")
+    .single();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  revalidatePath("/work-orders");
+  revalidatePath("/");
+  redirect(`/work-orders/${data.id}`);
+}
+
+export async function updateWorkOrderAction(formData: FormData) {
+  await requireAdmin();
+
+  const id = String(formData.get("id") ?? "");
+  if (!id) {
+    throw new Error("Nedostaje ID radnog naloga.");
+  }
+
+  const input = CreateWorkOrderSchema.parse({
+    title: formData.get("title"),
+    description: nullableString(formData.get("description")),
+    location_id: formData.get("location_id"),
+    scheduled_start: nullableDate(formData.get("scheduled_start")),
+    scheduled_end: nullableDate(formData.get("scheduled_end"))
+  });
+
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase.from("work_orders").update(input).eq("id", id);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  revalidatePath("/work-orders");
+  revalidatePath(`/work-orders/${id}`);
+}
+
+export async function setWorkOrderStatusAction(formData: FormData) {
+  await requireAdmin();
+
+  const input = UpdateWorkOrderStatusSchema.parse({
+    id: formData.get("id"),
+    status: formData.get("status")
+  });
+
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase.from("work_orders").update({ status: input.status }).eq("id", input.id);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  revalidatePath("/work-orders");
+  revalidatePath(`/work-orders/${input.id}`);
+  revalidatePath("/");
+}
+
+export async function assignWorkOrderWorkersAction(formData: FormData) {
+  await requireAdmin();
+
+  const input = AssignWorkOrderWorkersSchema.parse({
+    work_order_id: formData.get("work_order_id"),
+    worker_ids: formData.getAll("worker_id")
+  });
+
+  const supabase = await createSupabaseServerClient();
+  const { error: deleteError } = await supabase
+    .from("work_order_assignees")
+    .delete()
+    .eq("work_order_id", input.work_order_id);
+
+  if (deleteError) {
+    throw new Error(deleteError.message);
+  }
+
+  const { error: insertError } = await supabase.from("work_order_assignees").insert(
+    input.worker_ids.map((workerId) => ({
+      work_order_id: input.work_order_id,
+      worker_id: workerId
+    }))
+  );
+
+  if (insertError) {
+    throw new Error(insertError.message);
+  }
+
+  revalidatePath("/work-orders");
+  revalidatePath(`/work-orders/${input.work_order_id}`);
+}
+
+export async function setWorkOrderMaterialsAction(formData: FormData) {
+  await requireAdmin();
+
+  const workOrderId = String(formData.get("work_order_id") ?? "");
+  const materialIds = formData.getAll("material_id").map(String);
+  const materials = materialIds
+    .map((materialId) => ({
+      material_id: materialId,
+      assigned_quantity: String(formData.get(`quantity_${materialId}`) ?? "").trim()
+    }))
+    .filter((material) => material.assigned_quantity.length > 0 && Number(material.assigned_quantity) > 0);
+
+  const input = AssignWorkOrderMaterialsSchema.parse({
+    work_order_id: workOrderId,
+    materials
+  });
+
+  const supabase = await createSupabaseServerClient();
+  const { data: existing, error: fetchError } = await supabase
+    .from("work_order_materials")
+    .select("material_id")
+    .eq("work_order_id", input.work_order_id);
+
+  if (fetchError) {
+    throw new Error(fetchError.message);
+  }
+
+  const nextMaterialIds = new Set(input.materials.map((material) => material.material_id));
+  const removedMaterialIds = (existing ?? [])
+    .map((material) => material.material_id)
+    .filter((materialId) => !nextMaterialIds.has(materialId));
+
+  for (const materialId of removedMaterialIds) {
+    const { error: deleteError } = await supabase
+      .from("work_order_materials")
+      .delete()
+      .eq("work_order_id", input.work_order_id)
+      .eq("material_id", materialId);
+
+    if (deleteError) {
+      throw new Error(deleteError.message);
+    }
+  }
+
+  const { error: upsertError } = await supabase
+    .from("work_order_materials")
+    .upsert(
+      input.materials.map((material) => ({
+        work_order_id: input.work_order_id,
+        material_id: material.material_id,
+        assigned_quantity: material.assigned_quantity
+      })),
+      { onConflict: "work_order_id,material_id" }
+    );
+
+  if (upsertError) {
+    throw new Error(upsertError.message);
+  }
+
+  revalidatePath("/work-orders");
+  revalidatePath(`/work-orders/${input.work_order_id}`);
+}
+
+export async function uploadWorkOrderPlanAction(formData: FormData) {
+  const profile = await requireAdmin();
+
+  const workOrderId = String(formData.get("work_order_id") ?? "");
+  const file = formData.get("file");
+
+  if (!workOrderId) {
+    throw new Error("Nedostaje ID radnog naloga.");
+  }
+
+  if (!(file instanceof File) || file.size === 0) {
+    throw new Error("Izaberite PDF ili sliku plana.");
+  }
+
+  const allowedTypes = ["application/pdf", "image/jpeg", "image/png", "image/webp"];
+  if (!allowedTypes.includes(file.type)) {
+    throw new Error("Dozvoljeni su samo PDF, JPG, PNG i WebP fajlovi.");
+  }
+
+  const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+  const filePath = `${workOrderId}/${randomUUID()}-${safeName}`;
+  const admin = createSupabaseAdminClient();
+  const { error: uploadError } = await admin.storage.from("work-order-plans").upload(filePath, file, {
+    contentType: file.type,
+    upsert: false
+  });
+
+  if (uploadError) {
+    throw new Error(uploadError.message);
+  }
+
+  const { error: insertError } = await admin.from("work_order_attachments").insert({
+    work_order_id: workOrderId,
+    file_path: filePath,
+    file_name: file.name,
+    mime_type: file.type,
+    uploaded_by: profile.id
+  });
+
+  if (insertError) {
+    await admin.storage.from("work-order-plans").remove([filePath]);
+    throw new Error(insertError.message);
+  }
+
+  revalidatePath(`/work-orders/${workOrderId}`);
+}
+
+export async function deleteWorkOrderAttachmentAction(formData: FormData) {
+  await requireAdmin();
+
+  const id = String(formData.get("id") ?? "");
+  const workOrderId = String(formData.get("work_order_id") ?? "");
+
+  if (!id || !workOrderId) {
+    throw new Error("Nedostaje prilog.");
+  }
+
+  const admin = createSupabaseAdminClient();
+  const { data: attachment, error: fetchError } = await admin
+    .from("work_order_attachments")
+    .select("file_path")
+    .eq("id", id)
+    .eq("work_order_id", workOrderId)
+    .maybeSingle();
+
+  if (fetchError) {
+    throw new Error(fetchError.message);
+  }
+
+  if (!attachment) {
+    throw new Error("Prilog nije pronadjen.");
+  }
+
+  await admin.storage.from("work-order-plans").remove([attachment.file_path]);
+
+  const { error } = await admin.from("work_order_attachments").delete().eq("id", id);
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  revalidatePath(`/work-orders/${workOrderId}`);
+}
+
+export async function deleteWorkOrderAction(formData: FormData) {
+  await requireAdmin();
+
+  const id = String(formData.get("id") ?? "");
+  if (!id) {
+    throw new Error("Nedostaje ID radnog naloga.");
+  }
+
+  const admin = createSupabaseAdminClient();
+  const { count, error: countError } = await admin
+    .from("work_reports")
+    .select("id", { count: "exact", head: true })
+    .eq("work_order_id", id);
+
+  if (countError) {
+    throw new Error(countError.message);
+  }
+
+  if ((count ?? 0) > 0) {
+    throw new Error("Radni nalog ima dnevne zapise i ne moze biti obrisan.");
+  }
+
+  const { data: attachments } = await admin
+    .from("work_order_attachments")
+    .select("file_path")
+    .eq("work_order_id", id);
+
+  const { error } = await admin.from("work_orders").delete().eq("id", id);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  const paths = (attachments ?? []).map((attachment) => attachment.file_path);
+  if (paths.length > 0) {
+    await admin.storage.from("work-order-plans").remove(paths);
+  }
+
+  revalidatePath("/work-orders");
   revalidatePath("/");
 }

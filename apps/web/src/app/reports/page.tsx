@@ -48,6 +48,7 @@ export default async function ReportsPage() {
       .select(
         "id, performed_at, notes, worker_id, location_id, profiles(full_name), locations(name, address), work_report_items(material_id, quantity, materials(name, unit))"
       )
+      .is("work_order_id", null)
       .order("performed_at", { ascending: false })
       .limit(500)
   ]);
@@ -72,7 +73,7 @@ export default async function ReportsPage() {
       <div className="page-header">
         <div>
           <h2>{sr.nav.reports}</h2>
-          <p className="muted">Istorija svih radova, radnika, lokacija i materijala.</p>
+          <p className="muted">Arhiva starih samostalnih izvestaja pre uvodjenja radnih naloga.</p>
         </div>
       </div>
 

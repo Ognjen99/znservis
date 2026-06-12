@@ -12,6 +12,7 @@ type AdminShellProps = {
 
 const navItems = [
   { href: "/", label: sr.nav.dashboard },
+  { href: "/work-orders", label: sr.nav.workOrders },
   { href: "/reports", label: sr.nav.reports },
   { href: "/workers", label: sr.nav.workers },
   { href: "/locations", label: sr.nav.locations },
@@ -58,7 +59,7 @@ export function AdminShell({ children }: AdminShellProps) {
         <nav className="nav">
           {navItems.map((item) => (
             <Link
-              className={pathname === item.href ? "nav-active" : undefined}
+              className={pathname === item.href || (item.href !== "/" && pathname.startsWith(item.href)) ? "nav-active" : undefined}
               href={item.href}
               key={item.href}
               onClick={closeNav}

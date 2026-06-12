@@ -420,6 +420,27 @@ textarea {
   gap: 8px;
 }
 
+.checkbox-grid,
+.stack-list {
+  display: grid;
+  gap: 10px;
+}
+
+.checkbox-row,
+.inline-row {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.checkbox-row {
+  background: #f8fafc;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+
 .button-secondary {
   background: #e5e7eb;
   color: var(--text);

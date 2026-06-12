@@ -1,23 +1,26 @@
 import { sr } from "@znservis/i18n";
+import { workOrderStatusLabels, type WorkOrderStatus } from "@znservis/shared";
 import { AdminShell } from "@/components/AdminShell";
 import { TableWrap } from "@/components/TableWrap";
 import { requireAdmin } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { firstRelation, type SupabaseRelation } from "@/lib/supabaseRelations";
 
-type RecentReport = {
+type RecentWorkOrder = {
   id: string;
-  performed_at: string;
-  notes: string | null;
-  profiles: { full_name: string } | null;
+  title: string;
+  status: WorkOrderStatus;
+  scheduled_start: string | null;
+  scheduled_end: string | null;
   locations: { name: string } | null;
 };
 
-type RecentReportRecord = {
+type RecentWorkOrderRecord = {
   id: string;
-  performed_at: string;
-  notes: string | null;
-  profiles: SupabaseRelation<{ full_name: string }>;
+  title: string;
+  status: WorkOrderStatus;
+  scheduled_start: string | null;
+  scheduled_end: string | null;
   locations: SupabaseRelation<{ name: string }>;
 };
 
@@ -25,8 +28,12 @@ export default async function DashboardPage() {
   await requireAdmin();
   const supabase = await createSupabaseServerClient();
 
-  const [{ count: reportsCount }, { count: workersCount }, { count: locationsCount }, recentReports] =
+  const [{ count: activeOrdersCount }, { count: reportsCount }, { count: workersCount }, { count: locationsCount }, recentOrders] =
     await Promise.all([
+      supabase
+        .from("work_orders")
+        .select("id", { count: "exact", head: true })
+        .in("status", ["assigned", "in_progress", "on_hold"]),
       supabase.from("work_reports").select("id", { count: "exact", head: true }),
       supabase
         .from("profiles")
@@ -37,18 +44,19 @@ export default async function DashboardPage() {
         .select("id", { count: "exact", head: true })
         .eq("active", true),
       supabase
-        .from("work_reports")
-        .select("id, performed_at, notes, profiles(full_name), locations(name)")
-        .order("performed_at", { ascending: false })
+        .from("work_orders")
+        .select("id, title, status, scheduled_start, scheduled_end, locations(name)")
+        .order("created_at", { ascending: false })
         .limit(8)
     ]);
 
-  const reports: RecentReport[] = ((recentReports.data ?? []) as RecentReportRecord[]).map((report) => ({
-    id: report.id,
-    performed_at: report.performed_at,
-    notes: report.notes,
-    profiles: firstRelation(report.profiles),
-    locations: firstRelation(report.locations)
+  const orders: RecentWorkOrder[] = ((recentOrders.data ?? []) as RecentWorkOrderRecord[]).map((order) => ({
+    id: order.id,
+    title: order.title,
+    status: order.status,
+    scheduled_start: order.scheduled_start,
+    scheduled_end: order.scheduled_end,
+    locations: firstRelation(order.locations)
   }));
 
   return (
@@ -56,13 +64,17 @@ export default async function DashboardPage() {
       <div className="page-header">
         <div>
           <h2>{sr.nav.dashboard}</h2>
-          <p className="muted">Pregled rada firme i najnovijih izvestaja.</p>
+          <p className="muted">Pregled aktivnih radnih naloga i najnovijih aktivnosti.</p>
         </div>
       </div>
 
       <section className="grid grid-3">
         <article className="card">
-          <span className="muted">Ukupno izvestaja</span>
+          <span className="muted">Aktivni radni nalozi</span>
+          <div className="metric">{activeOrdersCount ?? 0}</div>
+        </article>
+        <article className="card">
+          <span className="muted">Dnevni zapisi</span>
           <div className="metric">{reportsCount ?? 0}</div>
         </article>
         <article className="card">
@@ -76,27 +88,31 @@ export default async function DashboardPage() {
       </section>
 
       <section className="card" style={{ marginTop: 16 }}>
-        <h3>{sr.admin.recentReports}</h3>
+        <h3>Najnoviji radni nalozi</h3>
         <TableWrap>
           <table className="table">
             <thead>
               <tr>
-                <th>Datum</th>
-                <th>Radnik</th>
+                <th>Nalog</th>
+                <th>Status</th>
                 <th>Lokacija</th>
-                <th>Napomena</th>
+                <th>Plan</th>
               </tr>
             </thead>
             <tbody>
-              {reports.map((report) => (
-                <tr key={report.id}>
-                  <td>{new Date(report.performed_at).toLocaleString("sr-RS")}</td>
-                  <td>{report.profiles?.full_name ?? "-"}</td>
-                  <td>{report.locations?.name ?? "-"}</td>
-                  <td>{report.notes ?? "-"}</td>
+              {orders.map((order) => (
+                <tr key={order.id}>
+                  <td>{order.title}</td>
+                  <td>{workOrderStatusLabels[order.status]}</td>
+                  <td>{order.locations?.name ?? "-"}</td>
+                  <td>
+                    {order.scheduled_start || order.scheduled_end
+                      ? `${order.scheduled_start ?? "?"} - ${order.scheduled_end ?? "?"}`
+                      : "-"}
+                  </td>
                 </tr>
               ))}
-              {reports.length === 0 ? (
+              {orders.length === 0 ? (
                 <tr>
                   <td colSpan={4}>{sr.common.empty}</td>
                 </tr>

@@ -12,6 +12,7 @@ export const sr = {
   },
   nav: {
     dashboard: "Kontrolna tabla",
+    workOrders: "Radni nalozi",
     reports: "Izvestaji",
     workers: "Radnici",
     locations: "Lokacije",
@@ -29,6 +30,35 @@ export const sr = {
     notes: "Napomene",
     myReports: "Moji izvestaji",
     noReports: "Nema izvestaja"
+  },
+  workOrder: {
+    singular: "Radni nalog",
+    plural: "Radni nalozi",
+    new: "Novi radni nalog",
+    title: "Naziv",
+    description: "Opis",
+    status: "Status",
+    assignees: "Radnici",
+    assignedMaterials: "Dodeljeni materijali",
+    assignedQuantity: "Dodeljeno",
+    usedQuantity: "Utroseno",
+    remainingQuantity: "Preostalo",
+    dailyLogs: "Dnevni zapisi",
+    newDailyLog: "Novi dnevni zapis",
+    myWorkOrders: "Moji radni nalozi",
+    noWorkOrders: "Nema radnih naloga",
+    planAttachments: "Planovi i prilozi",
+    uploadPlan: "Dodaj PDF/sliku plana",
+    scheduledStart: "Planirani pocetak",
+    scheduledEnd: "Planirani kraj",
+    statuses: {
+      created: "Kreiran",
+      assigned: "Dodeljen",
+      in_progress: "U toku",
+      on_hold: "Na cekanju",
+      completed: "Zavrsen",
+      cancelled: "Otkazan"
+    }
   },
   admin: {
     createWorker: "Dodaj radnika",

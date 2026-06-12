@@ -1,8 +1,11 @@
 import { z } from "zod";
-import { materialUnits, roles } from "./constants";
+import { materialUnits, roles, workOrderStatuses } from "./constants";
 
 export const RoleSchema = z.enum(roles);
 export const MaterialUnitSchema = z.enum(materialUnits);
+export const WorkOrderStatusSchema = z.enum(workOrderStatuses);
+
+const DateOnlySchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Expected date in YYYY-MM-DD format.");
 
 export const LoginSchema = z.object({
   email: z.string().email(),
@@ -55,6 +58,45 @@ export const CreateWorkReportSchema = z.object({
   items: z.array(WorkReportItemSchema).min(1)
 });
 
+export const DailyLogItemSchema = WorkReportItemSchema;
+
+export const CreateDailyLogSchema = z.object({
+  work_order_id: z.string().uuid(),
+  location_id: z.string().uuid(),
+  work_date: DateOnlySchema,
+  performed_at: z.string().datetime(),
+  notes: z.string().trim().optional().nullable(),
+  items: z.array(DailyLogItemSchema).min(1)
+});
+
+export const CreateWorkOrderSchema = z.object({
+  title: z.string().trim().min(2),
+  description: z.string().trim().optional().nullable(),
+  location_id: z.string().uuid(),
+  scheduled_start: DateOnlySchema.optional().nullable(),
+  scheduled_end: DateOnlySchema.optional().nullable()
+});
+
+export const UpdateWorkOrderStatusSchema = z.object({
+  id: z.string().uuid(),
+  status: WorkOrderStatusSchema
+});
+
+export const AssignWorkOrderWorkersSchema = z.object({
+  work_order_id: z.string().uuid(),
+  worker_ids: z.array(z.string().uuid()).min(1)
+});
+
+export const WorkOrderMaterialAssignmentSchema = z.object({
+  material_id: z.string().uuid(),
+  assigned_quantity: z.coerce.number().positive()
+});
+
+export const AssignWorkOrderMaterialsSchema = z.object({
+  work_order_id: z.string().uuid(),
+  materials: z.array(WorkOrderMaterialAssignmentSchema).min(1)
+});
+
 export const ReportFiltersSchema = z.object({
   from: z.string().optional(),
   to: z.string().optional(),
@@ -72,4 +114,9 @@ export type LocationInput = z.infer<typeof LocationSchema>;
 export type MaterialGroupInput = z.infer<typeof MaterialGroupSchema>;
 export type MaterialInput = z.infer<typeof MaterialSchema>;
 export type CreateWorkReportInput = z.infer<typeof CreateWorkReportSchema>;
+export type CreateDailyLogInput = z.infer<typeof CreateDailyLogSchema>;
+export type CreateWorkOrderInput = z.infer<typeof CreateWorkOrderSchema>;
+export type UpdateWorkOrderStatusInput = z.infer<typeof UpdateWorkOrderStatusSchema>;
+export type AssignWorkOrderWorkersInput = z.infer<typeof AssignWorkOrderWorkersSchema>;
+export type AssignWorkOrderMaterialsInput = z.infer<typeof AssignWorkOrderMaterialsSchema>;
 export type ReportFiltersInput = z.infer<typeof ReportFiltersSchema>;
